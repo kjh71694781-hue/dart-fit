@@ -312,4 +312,95 @@ col1, col2 = st.columns(2)
 with col1:
     corp_name = st.text_input("🏢 분석할 기업명 (DART 정식 명칭)", value="SK텔레콤", placeholder="예: 삼성전자, SK하이닉스, 현대자동차")
 with col2:
-    job_role = st.text_input("💼 지원 직무", value="AI/
+    job_role = st.text_input("💼 지원 직무", value="AI/빅데이터 경영 및 데이터 분석", placeholder="예: 반도체 공정엔지니어, B2B 마케팅, 재무회계")
+
+if st.button("🚀 1분 면접 브리핑 리포트 생성하기", type="primary", use_container_width=True):
+    if not active_dart_key:
+        st.error("❌ OpenDART API Key가 설정되지 않았습니다. 관리자에게 문의하거나 좌측 사이드바에 개인 키를 입력해주세요.")
+    else:
+        with st.spinner(f"🔍 [{corp_name}]의 3개년 재무제표 및 최신 사업보고서 본문을 DART에서 수집 중입니다..."):
+            df_fin, fin_md = fetch_financial_summary(active_dart_key, corp_name.strip(), base_year)
+            df_reports, reports_md, biz_contents = fetch_recent_reports_and_contents(active_dart_key, corp_name.strip(), base_year)
+            full_prompt = build_prompt(corp_name.strip(), job_role.strip(), fin_md, reports_md, biz_contents)
+
+        st.success(f"✅ [{corp_name}] DART 공시 및 사업보고서 데이터 추출 완료!")
+
+        tab1, tab2, tab3 = st.tabs([
+            "🤖 AI 면접 브리핑 리포트",
+            "📋 프롬프트 원문 (ChatGPT/Claude/Gemini 복붙용)",
+            "📊 추출된 DART 재무/공시 원본",
+        ])
+
+        with tab1:
+            if active_gemini_key:
+                with st.spinner("🧠 Gemini AI가 공시 데이터를 분석하여 면접 브리핑 리포트를 작성 중입니다..."):
+                    try:
+                        ai_report = generate_ai_report(active_gemini_key, full_prompt)
+                        st.markdown(ai_report)
+                        st.download_button(
+                            label="📥 마크다운 리포트(.md) 다운로드 (블로그/노션 발행용)",
+                            data=ai_report,
+                            file_name=f"DART_Fit_{corp_name}_{job_role}_리포트.md",
+                            mime="text/markdown",
+                        )
+                    except Exception as e:
+                        st.error(f"Gemini API 호출 중 오류가 발생했습니다: {e}")
+            else:
+                st.info(
+                    "💡 현재 **프롬프트 생성 모드**입니다. 바로 옆 **[📋 프롬프트 원문]** 탭을 눌러 복사 버튼을 클릭한 뒤, 사용하시는 ChatGPT / Claude / Gemini 창에 붙여넣으시면 동일한 리포트가 출력됩니다!"
+                )
+
+        with tab2:
+            st.markdown("아래 코드 블록 우측 상단의 **복사(Copy) 아이콘**을 클릭한 후 ChatGPT / Claude / Gemini에 붙여넣으세요!")
+            st.code(full_prompt, language="markdown")
+            st.download_button(
+                label="📥 프롬프트 텍스트(.txt) 다운로드",
+                data=full_prompt,
+                file_name=f"interview_prompt_{corp_name}.txt",
+                mime="text/plain",
+            )
+
+        with tab3:
+            st.markdown("#### 1️⃣ 최근 3개년 핵심 재무추이")
+            if not df_fin.empty:
+                st.dataframe(df_fin, use_container_width=True)
+            else:
+                st.warning(fin_md)
+
+            st.markdown("#### 2️⃣ 최근 정기공시 목록")
+            if not df_reports.empty:
+                st.dataframe(df_reports, use_container_width=True)
+            else:
+                st.warning(reports_md)
+
+            st.markdown("#### 3️⃣ 최신 사업보고서 핵심 본문 발췌")
+            with st.expander("원문 발췌 텍스트 펼쳐보기"):
+                st.text(biz_contents)
+
+# --- 실사용자 피드백 수집 섹션 ---
+st.markdown("---")
+with st.expander("💬 [10초 피드백] DART-Fit이 면접 준비 시간을 얼마나 줄여주었나요?"):
+    with st.form("feedback_form"):
+        f_col1, f_col2 = st.columns(2)
+        with f_col1:
+            saved_time = st.select_slider(
+                "예상 단축 시간",
+                options=["30분 미만", "약 1시간", "약 2시간", "3시간 이상 단축!"],
+                value="3시간 이상 단축!",
+            )
+        with f_col2:
+            rating = st.radio("리포트 만족도", ["⭐⭐⭐⭐⭐ (5점)", "⭐⭐⭐⭐ (4점)", "⭐⭐⭐ (3점)", "⭐⭐ 이하"], horizontal=True)
+        comment = st.text_input("아쉬운 점이나 추가되었으면 하는 기능을 자유롭게 적어주세요!")
+        submitted = st.form_submit_button("피드백 제출하기")
+        if submitted:
+            feedback_row = pd.DataFrame([{
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "corp_name": corp_name,
+                "job_role": job_role,
+                "saved_time": saved_time,
+                "rating": rating,
+                "comment": comment,
+            }])
+            feedback_file = "user_feedback.csv"
+            feedback_row.to_csv(feedback_file, mode="a", header=not os.path.exists(feedback_file), index=False, encoding="utf-8-sig")
+            st.success("소중한 피드백 감사합니다! 더 강력한 면접 분석 기능으로 보답하겠습니다. 🙌")
