@@ -1,13 +1,29 @@
 import os
 import re
+import sys
+import subprocess
 from datetime import datetime
 import requests
 import pandas as pd
 import streamlit as st
-from bs4 import BeautifulSoup
-from dotenv import load_dotenv, find_dotenv
-import OpenDartReader
-from google import genai
+
+# --- Streamlit Cloud 패키지 누락 방지용 자동 설치 가드 ---
+try:
+    import OpenDartReader
+    import tabulate
+    from bs4 import BeautifulSoup
+    from dotenv import load_dotenv, find_dotenv
+    from google import genai
+except ModuleNotFoundError:
+    subprocess.check_call([
+        sys.executable, "-m", "pip", "install",
+        "opendartreader", "tabulate", "beautifulsoup4", "lxml", "python-dotenv", "google-genai"
+    ])
+    import OpenDartReader
+    import tabulate
+    from bs4 import BeautifulSoup
+    from dotenv import load_dotenv, find_dotenv
+    from google import genai
 
 # 1. 로컬 환경 변수 로드 (.env 자동 탐색)
 load_dotenv(find_dotenv())
